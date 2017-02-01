@@ -20,6 +20,7 @@ static void run_relax(boxmg::topo_ptr grid, int nrelax)
 	log::status << "Running line-xy relaxation " << nrelax << " times" << std::endl;
 
 	auto so = mpi::gallery::poisson(grid);
+	so.stencil().five_pt() = false;
 	mpi::grid_func b(grid);
 	mpi::grid_func x(grid);
 	mpi::grid_func res(grid);
