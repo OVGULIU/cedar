@@ -84,7 +84,7 @@
 
 ! ======================================================================
 
-      line_solve_comm_type = BMG_LINE_SOLVE_COMM_TRADITIONAL
+      line_solve_comm_type = BMG_LINE_SOLVE_COMM_TUNED
       TAG = 3
 
       J1=JJ-1

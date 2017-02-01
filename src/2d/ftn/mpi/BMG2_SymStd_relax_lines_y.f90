@@ -86,7 +86,7 @@
 ! ======================================================================
 
       TAG = 4
-      line_solve_comm_type = BMG_LINE_SOLVE_COMM_TRADITIONAL
+      line_solve_comm_type = BMG_LINE_SOLVE_COMM_TUNED
 
       J1=JJ-1
       I1=II-1
