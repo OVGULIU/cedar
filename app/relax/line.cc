@@ -41,6 +41,8 @@ static void run_relax(boxmg::topo_ptr grid, int nrelax)
 	                                                             so.stencil().shape(1)),
 				bmg2d::relax_stencil(so.stencil().shape(0), so.stencil().shape(1))}};
 
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	timer_begin("setup-lines");
 	kreg->setup_relax_x(so, SOR[0]);
 	kreg->setup_relax_y(so, SOR[1]);
