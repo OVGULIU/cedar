@@ -37,6 +37,8 @@ if(ENABLE_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
+add_subdirectory(app)
+
 if(ENABLE_UNIT_TESTS)
   find_package(PythonLibs REQUIRED)
   find_package(NumPy REQUIRED)
