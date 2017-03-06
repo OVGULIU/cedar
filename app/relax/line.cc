@@ -38,9 +38,13 @@ static void run_relax(boxmg::topo_ptr grid, int nrelax)
 	x.halo_ctx = halo_ctx;
 	res.halo_ctx = halo_ctx;
 
-	std::array<bmg2d::relax_stencil,2> SOR{{bmg2d::relax_stencil(so.stencil().shape(0),
-	                                                             so.stencil().shape(1)),
+	std::array<bmg2d::relax_stencil,3> SOR{{
+     			bmg2d::relax_stencil(so.stencil().shape(0), so.stencil().shape(1)),
+				bmg2d::relax_stencil(so.stencil().shape(0), so.stencil().shape(1)),
 				bmg2d::relax_stencil(so.stencil().shape(0), so.stencil().shape(1))}};
+
+
+	kreg->setup_relax(so, SOR[2]);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
@@ -48,7 +52,6 @@ static void run_relax(boxmg::topo_ptr grid, int nrelax)
 	kreg->setup_relax_x(so, SOR[0]);
 	kreg->setup_relax_y(so, SOR[1]);
 	timer_end("setup-lines");
-
 
 	timer_begin("relax-lines");
 	for (auto i = 0; i < nrelax; i++) {
@@ -59,6 +62,13 @@ static void run_relax(boxmg::topo_ptr grid, int nrelax)
 		kreg->relax_lines_x(so, x, b, SOR[0], res, cycle::Dir::UP);
 	}
 	timer_end("relax-lines");
+
+	timer_begin("relax-point");
+	for (auto i = 0; i < nrelax; i++) {
+		kreg->relax(so, x, b, SOR[2], cycle::Dir::DOWN);
+		kreg->relax(so, x, b, SOR[2], cycle::Dir::UP);
+	}
+	timer_end("relax-point");
 
 	timer_save("timings.json");
 }
