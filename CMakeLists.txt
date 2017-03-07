@@ -40,7 +40,7 @@ endif()
 add_subdirectory(app)
 
 if(ENABLE_UNIT_TESTS)
-  find_package(PythonLibs REQUIRED)
+  find_package(PythonLibs 2.7 REQUIRED)
   find_package(NumPy REQUIRED)
   message(STATUS ${PYTHON_INCLUDE_DIR})
   list(APPEND boxmg-deps ${PYTHON_LIBRARY})

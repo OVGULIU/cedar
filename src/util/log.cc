@@ -1,3 +1,6 @@
+#include <stack>
+#include <tuple>
+
 #include <boxmg/types.h>
 #include <boxmg/util/log.h>
 
@@ -6,6 +9,7 @@ namespace boxmg { namespace log {
 using lmap_t = std::map<std::string, unsigned int>;
 std::unique_ptr<lmap_t> log_level = nullptr;
 unsigned int level = 0;
+std::stack<std::tuple<unsigned int, std::string>> saved_levels;
 
 LevelLogger memory("memory", Color::Modifier(Color::FG_BLUE));
 LevelLogger status("status", Color::Modifier(Color::FG_DEFAULT));
@@ -41,13 +45,32 @@ void init()
 	}
 
 	config::reader conf;
+	init_level(conf);
+}
+
+void init_level(config::reader & conf)
+{
+	level = 0;
 
 	std::vector<std::string> clevels = conf.getvec<std::string>("log");
 
 	for (auto clvl : clevels) level |= (*log_level)[clvl];
-
 }
 
+void push_level(std::string header, config::reader & conf)
+{
+	saved_levels.emplace(level, header_msg);
+	init_level(conf);
+	set_header_msg(" (" + header + " " + std::to_string(saved_levels.size()-1) + ")");
+}
+
+void pop_level()
+{
+	auto prev = saved_levels.top();
+	level = std::get<0>(prev);
+	set_header_msg(std::get<1>(prev));
+	saved_levels.pop();
+}
 
 std::string header()
 {
@@ -60,7 +83,7 @@ std::string header()
 	Color::Modifier def(Color::FG_DEFAULT);
 
 	strftime(buffer, sizeof(buffer), "%a %b %d %H:%M:%S %Y", &tm);
-	os << green << "[BoxMG <" << buffer << ">" << header_msg << "] " << def;
+	os << green << "[Cedar <" << buffer << ">" << header_msg << "] " << def;
 
 	return os.str();
 }

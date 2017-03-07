@@ -3,6 +3,7 @@
 
 #include <boxmg/kernel_registry.h>
 #include <boxmg/mpi/grid_topo.h>
+#include <boxmg/config/reader.h>
 
 
 namespace boxmg {
@@ -56,9 +57,11 @@ public:
 
 
 	void setup_cg_boxmg(const stencil_op & so,
+	                    std::shared_ptr<config::reader> conf,
 	                    std::shared_ptr<serial_solver> *bmg)
 	{
 		active.run(kernel_name::setup_cg_boxmg, so,
+		           static_cast<std::shared_ptr<config::reader>>(conf),
 		           static_cast<std::shared_ptr<serial_solver>*>(bmg));
 
 	}
@@ -73,10 +76,12 @@ public:
 
 
 	void setup_cg_redist(const stencil_op & so,
+	                     std::shared_ptr<config::reader> conf,
 	                     std::shared_ptr<redist_solver> * bmg,
 	                     std::vector<int> & nblocks)
 	{
 		active.run(kernel_name::setup_cg_redist, so,
+		           static_cast<std::shared_ptr<config::reader>>(conf),
 		           static_cast<std::shared_ptr<redist_solver>*>(bmg), nblocks);
 	}
 

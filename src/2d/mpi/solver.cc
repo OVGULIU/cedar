@@ -117,7 +117,10 @@ void mpi::solver::setup_cg_solve()
 		}
 		if (cg_solver_str == "boxmg" or nblocks[0]*nblocks[1] == 1) {
 			std::shared_ptr<bmg2d::solver> cg_bmg;
-			kernels->setup_cg_boxmg(cop, &cg_bmg);
+			auto cg_conf = conf->getconf("cg-config");
+			if (!cg_conf)
+				cg_conf = conf;
+			kernels->setup_cg_boxmg(cop, cg_conf, &cg_bmg);
 			coarse_solver = [&,cg_bmg,kernels](const discrete_op<mpi::grid_func> &A, mpi::grid_func &x, const mpi::grid_func &b) {
 				const bmg2d::mpi::stencil_op &av = dynamic_cast<const bmg2d::mpi::stencil_op&>(A);
 				kernels->solve_cg_boxmg(*cg_bmg, x, b);
@@ -126,10 +129,10 @@ void mpi::solver::setup_cg_solve()
 			};
 		} else if (cg_solver_str == "redist") {
 			std::shared_ptr<mpi::redist_solver> cg_bmg;
-			timer redist_setup_timer("Redist Setup");
-			redist_setup_timer.begin();
-			kernels->setup_cg_redist(cop, &cg_bmg, nblocks);
-			redist_setup_timer.end();
+			auto cg_conf = conf->getconf("cg-config");
+			if (!cg_conf)
+				cg_conf = conf;
+			kernels->setup_cg_redist(cop, cg_conf, &cg_bmg, nblocks);
 			coarse_solver = [&,cg_bmg,kernels](const discrete_op<mpi::grid_func> &A, mpi::grid_func &x, const mpi::grid_func &b) {
 				const bmg2d::mpi::stencil_op &av = dynamic_cast<const bmg2d::mpi::stencil_op&>(A);
 				kernels->solve_cg_redist(*cg_bmg, x, b);
