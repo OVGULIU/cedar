@@ -45,6 +45,7 @@ public:
 	void solve(const grid_func & b, grid_func & x);
 
 protected:
+	bool redundant; /** Flag for whether redistribution is performed redundantly */
 	bool ser_cg;
 	std::unique_ptr<solver<xxvii_pt>> slv;
 	std::unique_ptr<cdr3::solver<xxvii_pt>> slv_ser;
@@ -135,50 +136,57 @@ protected:
 		}
 
 		buf_arr rbuf(rbuf_len);
-		MPI_Allgatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
-		               displs.data(), MPI_DOUBLE, rcomms.pblock_comm);
+		if (redundant) {
+			MPI_Allgatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
+			               displs.data(), MPI_DOUBLE, rcomms.pblock_comm);
+		} else {
+			MPI_Gatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
+			            displs.data(), MPI_DOUBLE, 0, rcomms.pblock_comm);
+		}
 
-		// Loop through all my blocks
-		// TODO: this is unreadable, reduce the number of nestings
-		len_t igs, jgs, kgs;
-		idx = 0;
-		kgs = 1;
-		for (auto k : range(nbz.len(0))) {
-			auto nz = 0;
-			jgs = 1;
-			for (auto j : range(nby.len(0))) {
-				auto ny = 0;
-				igs = 1;
-				for (auto i : range(nbx.len(0))) {
-					auto nx = nbx(i);
-					ny = nby(j);
-					nz = nbz(k);
-					for (auto kk : range(nz+2)) {
-						for (auto jj : range(ny+2)) {
-							for (auto ii : range(nx+2)) {
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::p  ) = rbuf(idx);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::pw ) = rbuf(idx+1);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::pnw) = rbuf(idx+2);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::ps ) = rbuf(idx+3);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::psw) = rbuf(idx+4);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bne) = rbuf(idx+5);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bn ) = rbuf(idx+6);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bnw) = rbuf(idx+7);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::be ) = rbuf(idx+8);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::b  ) = rbuf(idx+9);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bw ) = rbuf(idx+10);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bse) = rbuf(idx+11);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bs ) = rbuf(idx+12);
-								dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bsw) = rbuf(idx+13);
-								idx += 14;
+		if (redundant or (block_id == 0)) {
+			// Loop through all my blocks
+			// TODO: this is unreadable, reduce the number of nestings
+			len_t igs, jgs, kgs;
+			idx = 0;
+			kgs = 1;
+			for (auto k : range(nbz.len(0))) {
+				auto nz = 0;
+				jgs = 1;
+				for (auto j : range(nby.len(0))) {
+					auto ny = 0;
+					igs = 1;
+					for (auto i : range(nbx.len(0))) {
+						auto nx = nbx(i);
+						ny = nby(j);
+						nz = nbz(k);
+						for (auto kk : range(nz+2)) {
+							for (auto jj : range(ny+2)) {
+								for (auto ii : range(nx+2)) {
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::p  ) = rbuf(idx);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::pw ) = rbuf(idx+1);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::pnw) = rbuf(idx+2);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::ps ) = rbuf(idx+3);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::psw) = rbuf(idx+4);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bne) = rbuf(idx+5);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bn ) = rbuf(idx+6);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bnw) = rbuf(idx+7);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::be ) = rbuf(idx+8);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::b  ) = rbuf(idx+9);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bw ) = rbuf(idx+10);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bse) = rbuf(idx+11);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bs ) = rbuf(idx+12);
+									dest(igs+ii-1,jgs+jj-1,kgs+kk-1,xxvii_pt::bsw) = rbuf(idx+13);
+									idx += 14;
+								}
 							}
 						}
+						igs += nx;
 					}
-					igs += nx;
+					jgs += ny;
 				}
-				jgs += ny;
+				kgs += nz;
 			}
-			kgs += nz;
 		}
 	}
 };

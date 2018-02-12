@@ -45,6 +45,7 @@ redist_solver::redist_solver(const stencil_op<xxvii_pt> & so,
                              mpi::msg_exchanger *halof,
                              std::shared_ptr<config::reader> conf,
                              std::array<int, 3> nblock) :
+	redundant(false),
 	ser_cg(nblock[0]*nblock[1]*nblock[2] == 1), nblock(nblock), active(true), recv_id(-1)
 {
 	auto & topo = so.grid();
@@ -61,7 +62,7 @@ redist_solver::redist_solver(const stencil_op<xxvii_pt> & so,
 		so_redist = redist_operator<mpi::stencil_op, xxvii_pt>(so, ctopo);
 	}
 
-	if (active) {
+	if ((redundant and active) or (not redundant and block_id == 0)) {
 		if (ser_cg) {
 			log::push_level("serial", *conf);
 			slv_ser = std::make_unique<cdr3::solver<xxvii_pt>>(so_redist_ser, conf);
@@ -87,7 +88,7 @@ void redist_solver::solve(const grid_func & b, grid_func & x)
 	gather_rhs(b);
 	timer_end("agglomerate");
 
-	if (active) {
+	if ((redundant and active) or (not redundant and block_id == 0)) {
 		timer_down();
 		if (ser_cg) {
 			log::push_level("serial", slv_ser->get_config());
@@ -268,40 +269,47 @@ void redist_solver::gather_rhs(const grid_func & b)
 	}
 
 	buf_arr rbuf(rbuf_len);
-	MPI_Allgatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
-	               displs.data(), MPI_DOUBLE, rcomms.pblock_comm);
+	if (redundant) {
+		MPI_Allgatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
+		               displs.data(), MPI_DOUBLE, rcomms.pblock_comm);
+	} else {
+		MPI_Gatherv(sbuf.data(), sbuf.len(0), MPI_DOUBLE, rbuf.data(), rcounts.data(),
+		            displs.data(), MPI_DOUBLE, 0, rcomms.pblock_comm);
+	}
 
 	// Currently upcasting to make generic...
 	cdr3::grid_func & bgen = (ser_cg) ? b_redist_ser : b_redist;
 
-	// Loop through all my blocks
-	// TODO: this is unreadable, reduce the number of nestings
-	len_t igs, jgs, kgs;
-	idx = 0;
-	kgs = 1;
-	for (auto k : range(nbz.len(0))) {
-		auto nz = 0;
-		jgs = 1;
-		for (auto j : range(nby.len(0))) {
-			auto ny = 0;
-			igs = 1;
-			for (auto i : range(nbx.len(0))) {
-				auto nx = nbx(i);
-				ny = nby(j);
-				nz = nbz(k);
-				for (auto kk : range(nz)) {
-					for (auto jj : range(ny)) {
-						for (auto ii : range(nx)) {
-							bgen(igs+ii,jgs+jj,kgs+kk) = rbuf(idx);
-							idx++;
+	if (redundant or (block_id == 0)) {
+		// Loop through all my blocks
+		// TODO: this is unreadable, reduce the number of nestings
+		len_t igs, jgs, kgs;
+		idx = 0;
+		kgs = 1;
+		for (auto k : range(nbz.len(0))) {
+			auto nz = 0;
+			jgs = 1;
+			for (auto j : range(nby.len(0))) {
+				auto ny = 0;
+				igs = 1;
+				for (auto i : range(nbx.len(0))) {
+					auto nx = nbx(i);
+					ny = nby(j);
+					nz = nbz(k);
+					for (auto kk : range(nz)) {
+						for (auto jj : range(ny)) {
+							for (auto ii : range(nx)) {
+								bgen(igs+ii,jgs+jj,kgs+kk) = rbuf(idx);
+								idx++;
+							}
 						}
 					}
+					igs += nx;
 				}
-				igs += nx;
+				jgs += ny;
 			}
-			jgs += ny;
+			kgs += nz;
 		}
-		kgs += nz;
 	}
 }
 
@@ -310,7 +318,59 @@ void redist_solver::scatter_sol(grid_func & x)
 {
 	auto & xgen = (ser_cg) ? x_redist_ser : x_redist;
 
-	if (active) {
+	if (not redundant) {
+		len_t sbuf_len = 0;
+		for (auto k : range(nbz.len(0))) {
+			for (auto j : range(nby.len(0))) {
+				for (auto i : range(nbx.len(0))) {
+					sbuf_len += (nbx(i)+2)*(nby(j)+2)*(nbz(k)+2);
+				}
+			}
+		}
+
+		array<real_t, 1> sbuf(sbuf_len);
+		std::vector<int> scounts(nbx.len(0)*nby.len(0)*nbz.len(0));
+		std::vector<int> displs(nbx.len(0)*nby.len(0)*nbz.len(0));
+
+		{
+			len_t igs, jgs, kgs;
+			len_t idx = 0;
+			kgs = 1;
+			for (auto k : range(nbz.len(0))) {
+				auto nz = 0;
+				jgs = 1;
+				for (auto j : range(nby.len(0))) {
+					auto ny = 0;
+					igs = 1;
+					for (auto i : range(nbx.len(0))) {
+						auto nx = nbx(i);
+						ny = nby(j);
+						nz = nbz(k);
+
+						int block_ind = i+j*nbx.len(0)+k*nbx.len(0)*nby.len(0);
+						displs[block_ind] = idx;
+						scounts[block_ind] = (nx+2)*(ny+2)*(nz+2);
+
+						for (auto kk : range(nz+2)) {
+							for (auto jj : range(ny+2)) {
+								for (auto ii : range(nx+2)) {
+									sbuf(idx) = x_redist(igs+ii-1,jgs+jj-1,kgs+kk-1);
+									idx++;
+								}
+							}
+						}
+						igs += nx;
+					}
+					jgs += ny;
+				}
+				kgs += nz;
+			}
+		}
+		MPI_Scatterv(sbuf.data(), scounts.data(), displs.data(),
+		             MPI_DOUBLE, x.data(), x.len(0)*x.len(1)*x.len(2),
+		             MPI_DOUBLE, 0, rcomms.pblock_comm);
+	}
+	if (redundant and active) {
 		// copy local part from redistributed solution
 		int ci = (block_id % (nbx.len(0)*nby.len(0))) % nbx.len(0);
 		int cj = (block_id % (nbx.len(0)*nby.len(0))) / nbx.len(0);
@@ -373,7 +433,7 @@ void redist_solver::scatter_sol(grid_func & x)
 
 			MPI_Send(sbuf.data(), sbuf.len(0)*sbuf.len(1)*sbuf.len(2), MPI_DOUBLE, send_id, 0, rcomms.pblock_comm);
 		}
-	} else if (recv_id > -1) {
+	} else if (redundant and (recv_id > -1)) {
 		MPI_Recv(x.data(), x.len(0)*x.len(1)*x.len(2), MPI_DOUBLE, recv_id, 0, rcomms.pblock_comm, MPI_STATUS_IGNORE);
 	}
 }
