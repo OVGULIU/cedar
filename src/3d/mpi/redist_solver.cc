@@ -354,7 +354,7 @@ void redist_solver::scatter_sol(grid_func & x)
 						for (auto kk : range(nz+2)) {
 							for (auto jj : range(ny+2)) {
 								for (auto ii : range(nx+2)) {
-									sbuf(idx) = x_redist(igs+ii-1,jgs+jj-1,kgs+kk-1);
+									sbuf(idx) = xgen(igs+ii-1,jgs+jj-1,kgs+kk-1);
 									idx++;
 								}
 							}
